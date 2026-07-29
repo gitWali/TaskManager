@@ -47,3 +47,20 @@ public class TaskManager
         return null;
     }
 }
+
+public void importLoadedTasks(List<Task> loadedTasks) 
+{
+    this.tasks.clear();
+    this.tasks.addAll(loadedTasks);
+
+    int maxId = 0;
+    for (Task t : loadedTasks) 
+    {
+        if (t.getId() > maxId) 
+        {
+            maxId = t.getId();
+        }
+    }
+    this.nextId = maxId + 1;
+}
+
