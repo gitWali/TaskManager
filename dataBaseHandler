@@ -1,0 +1,121 @@
+
+
+package service;
+
+import model.Priority;
+import model.Task;
+import java.sql.*;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+
+public class DatabaseHandler 
+{
+    private static final String DB_URL = "jdbc:sqlite:jira.db";
+
+    public DatabaseHandler() 
+    {
+        createTableIfNotExists();
+    }
+
+    private Connection connect() throws SQLException 
+    {
+        return DriverManager.getConnection(DB_URL);
+    }
+
+    private void createTableIfNotExists() 
+    {
+        String sql = "CREATE TABLE IF NOT EXISTS tasks ("
+                   + " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                   + " title TEXT NOT NULL,"
+                   + " description TEXT,"
+                   + " priority TEXT NOT NULL,"
+                   + " due_date TEXT NOT NULL,"
+                   + " is_completed INTEGER NOT NULL"
+                   + ");";
+
+        try (Connection conn = this.connect();
+             Statement stmt = conn.createStatement()) 
+        {
+            stmt.execute(sql);
+        } 
+      catch (SQLException e) 
+      {
+            System.err.println("[DB-Fehler] Tabelle konnte nicht erstellt werden: " + e.getMessage());
+        }
+    }
+
+    public int insertTask(String title, String description, Priority priority, LocalDate dueDate) 
+    {
+        String sql = "INSERT INTO tasks(title, description, priority, due_date, is_completed) VALUES(?,?,?,?,0)";
+        
+        try (Connection conn = this.connect();
+             PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) 
+        {
+            pstmt.setString(1, title);
+            pstmt.setString(2, description);
+            pstmt.setString(3, priority.name());
+            pstmt.setString(4, dueDate.toString());
+            pstmt.executeUpdate();
+          
+            try (ResultSet generatedKeys = pstmt.getGeneratedKeys()) 
+            {
+                if (generatedKeys.next()) 
+                {
+                    return generatedKeys.getInt(1);
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("[DB-Fehler] Ticket konnte nicht eingefügt werden: " + e.getMessage());
+        }
+        return -1;
+    }
+
+    public List<Task> getAllTasks()
+    {
+        List<Task> tasks = new ArrayList<>();
+        String sql = "SELECT id, title, description, priority, due_date, is_completed FROM tasks";
+
+        try (Connection conn = this.connect();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql))
+        {
+            while (rs.next()) 
+            {
+                int id = rs.getInt("id");
+                String title = rs.getString("title");
+                String description = rs.getString("description");
+                Priority priority = Priority.valueOf(rs.getString("priority"));
+                LocalDate dueDate = LocalDate.parse(rs.getString("due_date"));
+                boolean isCompleted = rs.getInt("is_completed") == 1;
+                Task task = new Task(id, title, description, priority, dueDate);
+                task.setCompleted(isCompleted);
+                tasks.add(task);
+            }
+        } 
+      catch (SQLException e) 
+        {
+            System.err.println("[DB-Fehler] Fehler beim Laden der Tickets: " + e.getMessage());
+        }
+        return tasks;
+    }
+    public boolean updateTaskStatus(int id, boolean isCompleted) 
+    {
+        String sql = "UPDATE tasks SET is_completed = ? WHERE id = ?";
+
+        try (Connection conn = this.connect();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) 
+        {
+            pstmt.setInt(1, isCompleted ? 1 : 0);
+            pstmt.setInt(2, id);
+            int affectedRows = pstmt.executeUpdate();
+            return affectedRows > 0;
+            
+        } 
+      catch (SQLException e) 
+      {
+            System.err.println("[DB-Fehler] Status-Update fehlgeschlagen: " + e.getMessage());
+            return false;
+        }
+    }
+}
